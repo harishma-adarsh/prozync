@@ -18,8 +18,27 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
+from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
+from django.http import JsonResponse
+
+def api_root(request):
+    return JsonResponse({
+        "status": "ProSync API is LIVE 🚀",
+        "documentation": {
+            "swagger": "/docs/swagger/",
+            "redoc": "/docs/redoc/"
+        },
+        "endpoints": {
+            "api_root": "/api/",
+            "admin": "/admin/"
+        }
+    })
 
 urlpatterns = [
+    path('', api_root),
     path('admin/', admin.site.urls),
     path('api/', include('core.urls')),
+    path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
+    path('docs/swagger/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
+    path('docs/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
