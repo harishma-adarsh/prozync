@@ -100,3 +100,37 @@ class AuthViewSet(viewsets.ViewSet):
         user = User.objects.create_user(username=username, email=email, password=password)
         Profile.objects.create(user=user, full_name=full_name)
         return Response({"detail": "Created"}, status=status.HTTP_201_CREATED)
+
+    @action(detail=False, methods=['post'])
+    def forgot_password(self, request):
+        email = request.data.get('email')
+        if not email:
+            return Response({"detail": "Email is required"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        user = User.objects.filter(email=email).first()
+        if not user:
+            return Response({"detail": "User with this email not found"}, status=status.HTTP_404_NOT_FOUND)
+        
+        # In a real app, you'd send an actual email/OTP here.
+        # For now, we simulate the success.
+        return Response({"detail": "OTP sent to your email (Dev mode: use 1234)"}, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['post'])
+    def reset_password(self, request):
+        email = request.data.get('email')
+        otp = request.data.get('otp')
+        new_password = request.data.get('new_password')
+        
+        if not email or not otp or not new_password:
+            return Response({"detail": "Missing fields"}, status=status.HTTP_400_BAD_REQUEST)
+            
+        if otp != "1234": # Simulated OTP check
+            return Response({"detail": "Invalid OTP"}, status=status.HTTP_400_BAD_REQUEST)
+            
+        user = User.objects.filter(email=email).first()
+        if not user:
+            return Response({"detail": "User not found"}, status=status.HTTP_404_NOT_FOUND)
+            
+        user.set_password(new_password)
+        user.save()
+        return Response({"detail": "Password reset successful"}, status=status.HTTP_200_OK)
