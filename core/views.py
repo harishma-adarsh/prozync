@@ -1,12 +1,14 @@
 from rest_framework import viewsets, permissions, status, filters
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from drf_spectacular.utils import extend_schema
 from django.contrib.auth.models import User
 from .models import Profile, Project, Post, Comment, Like, Collaboration, Follower, Notification, Invitation
 from .serializers import (
     UserSerializer, ProfileSerializer, ProjectSerializer, 
     PostSerializer, CommentSerializer, NotificationSerializer,
-    CollaborationSerializer, InvitationSerializer
+    CollaborationSerializer, InvitationSerializer,
+    SignupSerializer, SigninSerializer, ForgotPasswordSerializer, ResetPasswordSerializer
 )
 
 class ProjectViewSet(viewsets.ModelViewSet):
@@ -47,11 +49,31 @@ class PostViewSet(viewsets.ModelViewSet):
         )
         return Response({"detail": "Liked"})
 
-class ProfileViewSet(viewsets.ReadOnlyModelViewSet):
+class ProfileViewSet(viewsets.ModelViewSet):
     queryset = Profile.objects.all()
     serializer_class = ProfileSerializer
     filter_backends = [filters.SearchFilter]
     search_fields = ['full_name', 'user__username', 'profession']
+
+    def get_permissions(self):
+        if self.action in ['update', 'partial_update', 'destroy']:
+            return [permissions.IsAuthenticated()]
+        return [permissions.AllowAny()]
+
+    @action(detail=False, methods=['get', 'patch', 'put'])
+    def me(self, request):
+        if not request.user.is_authenticated:
+            return Response({"detail": "Not authenticated"}, status=status.HTTP_401_UNAUTHORIZED)
+        
+        profile = request.user.profile
+        if request.method == 'GET':
+            serializer = self.get_serializer(profile)
+            return Response(serializer.data)
+        
+        serializer = self.get_serializer(profile, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
 
     @action(detail=True, methods=['post'])
     def follow(self, request, pk=None):
@@ -84,8 +106,10 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
 class AuthViewSet(viewsets.ViewSet):
     permission_classes = [permissions.AllowAny]
 
+    @extend_schema(request=SignupSerializer)
     @action(detail=False, methods=['post'])
     def signup(self, request):
+        # ... logic
         username = request.data.get('username')
         email = request.data.get('email')
         password = request.data.get('password')
@@ -101,6 +125,22 @@ class AuthViewSet(viewsets.ViewSet):
         Profile.objects.create(user=user, full_name=full_name)
         return Response({"detail": "Created"}, status=status.HTTP_201_CREATED)
 
+    @extend_schema(request=SigninSerializer)
+    @action(detail=False, methods=['post'])
+    def signin(self, request):
+        from django.contrib.auth import authenticate
+        from rest_framework.authtoken.models import Token
+        
+        username = request.data.get('username')
+        password = request.data.get('password')
+        
+        user = authenticate(username=username, password=password)
+        if user:
+            token, created = Token.objects.get_or_create(user=user)
+            return Response({'token': token.key, 'user_id': user.pk, 'email': user.email})
+        return Response({"detail": "Invalid credentials"}, status=status.HTTP_401_UNAUTHORIZED)
+
+    @extend_schema(request=ForgotPasswordSerializer)
     @action(detail=False, methods=['post'])
     def forgot_password(self, request):
         email = request.data.get('email')
@@ -115,6 +155,7 @@ class AuthViewSet(viewsets.ViewSet):
         # For now, we simulate the success.
         return Response({"detail": "OTP sent to your email (Dev mode: use 1234)"}, status=status.HTTP_200_OK)
 
+    @extend_schema(request=ResetPasswordSerializer)
     @action(detail=False, methods=['post'])
     def reset_password(self, request):
         email = request.data.get('email')

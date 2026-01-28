@@ -105,7 +105,9 @@ ProSync addresses the challenges of:
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
 | **POST** | `/api/auth/signup/` | Register a new developer |
-| **POST** | `/api/auth/login/` | Get Auth Token |
+| **POST** | `/api/auth/signin/` | User login (returns Token + User Info) |
+| **POST** | `/api/auth/forgot-password/` | Request password reset OTP |
+| **POST** | `/api/auth/reset-password/` | Reset password using OTP |
 | **GET** | `/api/projects/` | List all projects (filtered by tech/trending) |
 | **POST** | `/api/projects/` | Create project + Upload ZIP |
 | **POST** | `/api/projects/<id>/star/` | Like/Star a repository |
