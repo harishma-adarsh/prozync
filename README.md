@@ -110,6 +110,8 @@ ProSync addresses the challenges of:
 | **POST** | `/api/auth/reset-password/` | Reset password using OTP |
 | **GET** | `/api/projects/` | List all projects (filtered by tech/trending) |
 | **POST** | `/api/projects/` | Create project + Upload ZIP |
+| **GET** | `/api/posts/` | List all social posts |
+| **POST** | `/api/posts/` | Create post + Upload Image |
 | **POST** | `/api/projects/<id>/star/` | Like/Star a repository |
 | **POST** | `/api/profiles/<id>/follow/` | Follow a specific developer |
 | **GET** | `/api/notifications/` | View likes, follows, and collab invites |

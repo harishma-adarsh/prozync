@@ -30,6 +30,7 @@ class Project(models.Model):
 class Post(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='posts')
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='posts', null=True, blank=True)
+    image = models.ImageField(upload_to='post_images/', blank=True, null=True)
     content = models.TextField() # Diagram says 'name' but usually it's content
     created_at = models.DateTimeField(auto_now_add=True)
 

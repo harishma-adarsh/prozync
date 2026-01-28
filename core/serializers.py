@@ -51,7 +51,7 @@ class PostSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Post
-        fields = ['id', 'user', 'username', 'project', 'content', 'like_count', 'comment_count', 'created_at']
+        fields = ['id', 'user', 'username', 'project', 'image', 'content', 'like_count', 'comment_count', 'created_at']
 
 class CommentSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source='user.username', read_only=True)
