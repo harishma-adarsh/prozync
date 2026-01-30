@@ -9,6 +9,8 @@ class Profile(models.Model):
     bio = models.TextField(blank=True, null=True)
     profession = models.CharField(max_length=100, blank=True, null=True)
     profile_pic = models.ImageField(upload_to='profiles/', blank=True, null=True)
+    otp = models.CharField(max_length=6, blank=True, null=True)
+    otp_created_at = models.DateTimeField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
@@ -21,6 +23,7 @@ class Project(models.Model):
     description = models.TextField(blank=True)
     technology = models.CharField(max_length=100, blank=True) # e.g. "Flutter"
     project_zip = models.FileField(upload_to='project_files/', blank=True, null=True) # For ZIP upload
+    cover_image = models.ImageField(upload_to='project_covers/', blank=True, null=True)
     is_private = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -88,3 +91,29 @@ class Invitation(models.Model):
     receiver = models.ForeignKey(User, on_delete=models.CASCADE)
     status = models.CharField(max_length=20, default='PENDING')
     sent_at = models.DateTimeField(auto_now_add=True)
+
+class ChatMessage(models.Model):
+    sender = models.ForeignKey(User, on_delete=models.CASCADE, related_name='sent_messages')
+    receiver = models.ForeignKey(User, on_delete=models.CASCADE, related_name='received_messages')
+    message = models.TextField()
+    is_read = models.BooleanField(default=False)
+    timestamp = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['timestamp']
+
+    def __str__(self):
+        return f"From {self.sender.username} to {self.receiver.username}"
+
+class ConnectionRequest(models.Model):
+    sender = models.ForeignKey(User, on_delete=models.CASCADE, related_name='sent_con_requests')
+    receiver = models.ForeignKey(User, on_delete=models.CASCADE, related_name='received_con_requests')
+    status = models.CharField(max_length=20, choices=[('PENDING', 'Pending'), ('ACCEPTED', 'Accepted'), ('REJECTED', 'Rejected')], default='PENDING')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('sender', 'receiver')
+
+    def __str__(self):
+        return f"{self.sender.username} -> {self.receiver.username} ({self.status})"
+
