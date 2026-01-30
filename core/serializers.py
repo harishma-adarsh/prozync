@@ -1,6 +1,7 @@
 from django.contrib.auth.models import User
 from django.db.models import Q
 from rest_framework import serializers
+from drf_spectacular.utils import extend_schema_field
 from .models import (
     Profile, Project, Post, Comment, Like, Collaboration, Follower, 
     Notification, Invitation, ChatMessage, ConnectionRequest
@@ -50,13 +51,16 @@ class ProfileSerializer(serializers.ModelSerializer):
             
         return super().update(instance, validated_data)
 
-    def get_follower_count(self, obj):
+    @extend_schema_field(serializers.IntegerField())
+    def get_follower_count(self, obj) -> int:
         return obj.user.follower_set.count()
 
-    def get_repo_count(self, obj):
+    @extend_schema_field(serializers.IntegerField())
+    def get_repo_count(self, obj) -> int:
         return obj.user.owned_projects.count()
 
-    def get_connection_status(self, obj):
+    @extend_schema_field(serializers.CharField())
+    def get_connection_status(self, obj) -> str:
         request = self.context.get('request')
         if not request or not request.user.is_authenticated:
             return None
@@ -86,7 +90,8 @@ class ProjectSerializer(serializers.ModelSerializer):
         model = Project
         fields = ['id', 'owner', 'owner_name', 'project_name', 'slug', 'description', 'technology', 'project_zip', 'cover_image', 'is_private', 'collaborator_count', 'created_at']
 
-    def get_collaborator_count(self, obj):
+    @extend_schema_field(serializers.IntegerField())
+    def get_collaborator_count(self, obj) -> int:
         return obj.collaborators_list.count()
 
 class PostSerializer(serializers.ModelSerializer):

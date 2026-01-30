@@ -170,6 +170,7 @@ class ProfileViewSet(viewsets.ModelViewSet):
         return Response(ConnectionRequestSerializer(con_request).data, status=status.HTTP_201_CREATED)
 
 class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = Notification.objects.all()
     serializer_class = NotificationSerializer
     permission_classes = [permissions.IsAuthenticated]
 
@@ -178,6 +179,7 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
 
 class AuthViewSet(viewsets.ViewSet):
     permission_classes = [permissions.AllowAny]
+    serializer_class = SignupSerializer
 
     @extend_schema(request=SignupSerializer)
     @action(detail=False, methods=['post'])
@@ -283,6 +285,7 @@ class AuthViewSet(viewsets.ViewSet):
         return Response({"detail": "Password reset successful"}, status=status.HTTP_200_OK)
 
 class ChatMessageViewSet(viewsets.ModelViewSet):
+    queryset = ChatMessage.objects.all()
     permission_classes = [permissions.IsAuthenticated]
     serializer_class = ChatMessageSerializer
 
@@ -311,6 +314,7 @@ class ChatMessageViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
 class InvitationViewSet(viewsets.ModelViewSet):
+    queryset = Invitation.objects.all()
     permission_classes = [permissions.IsAuthenticated]
     serializer_class = InvitationSerializer
 
@@ -384,6 +388,7 @@ class InvitationViewSet(viewsets.ModelViewSet):
         return Response(InvitationSerializer(invitation).data, status=status.HTTP_201_CREATED)
 
 class ConnectionRequestViewSet(viewsets.ModelViewSet):
+    queryset = ConnectionRequest.objects.all()
     permission_classes = [permissions.IsAuthenticated]
     serializer_class = ConnectionRequestSerializer
 
