@@ -184,21 +184,58 @@ class AuthViewSet(viewsets.ViewSet):
     @extend_schema(request=SignupSerializer)
     @action(detail=False, methods=['post'])
     def signup(self, request):
-        # ... logic
+        from django.db import transaction
+        
         username = request.data.get('username')
         email = request.data.get('email')
         password = request.data.get('password')
         full_name = request.data.get('full_name', '')
         
+        # Validate required fields
         if not username or not email or not password:
-            return Response({"detail": "Missing fields"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({
+                "detail": "Username, email, and password are required"
+            }, status=status.HTTP_400_BAD_REQUEST)
         
+        # Check if username already exists
         if User.objects.filter(username=username).exists():
-            return Response({"detail": "Username exists"}, status=status.HTTP_400_BAD_REQUEST)
-            
-        user = User.objects.create_user(username=username, email=email, password=password)
-        Profile.objects.create(user=user, full_name=full_name)
-        return Response({"detail": "Created"}, status=status.HTTP_201_CREATED)
+            return Response({
+                "detail": "Username already exists"
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Check if email already exists
+        if User.objects.filter(email=email).exists():
+            return Response({
+                "detail": "Email already registered"
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Create user and profile in a transaction
+        try:
+            with transaction.atomic():
+                # Create user with hashed password
+                user = User.objects.create_user(
+                    username=username,
+                    email=email,
+                    password=password
+                )
+                
+                # Profile will be created automatically by signal
+                # But we'll update the full_name if provided
+                if full_name:
+                    profile = user.profile
+                    profile.full_name = full_name
+                    profile.save()
+                
+                return Response({
+                    "detail": "Registration successful",
+                    "username": user.username,
+                    "email": user.email
+                }, status=status.HTTP_201_CREATED)
+                
+        except Exception as e:
+            return Response({
+                "detail": f"Registration failed: {str(e)}"
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     @extend_schema(request=SigninSerializer)
     @action(detail=False, methods=['post'])
@@ -209,11 +246,41 @@ class AuthViewSet(viewsets.ViewSet):
         username = request.data.get('username')
         password = request.data.get('password')
         
+        # Validate input
+        if not username or not password:
+            return Response({
+                "detail": "Username and password are required"
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Authenticate user
         user = authenticate(username=username, password=password)
+        
         if user:
+            # Ensure user is active
+            if not user.is_active:
+                return Response({
+                    "detail": "This account has been deactivated"
+                }, status=status.HTTP_403_FORBIDDEN)
+            
+            # Ensure profile exists (for backward compatibility)
+            if not hasattr(user, 'profile'):
+                Profile.objects.create(user=user)
+            
+            # Get or create auth token
             token, created = Token.objects.get_or_create(user=user)
-            return Response({'token': token.key, 'user_id': user.pk, 'email': user.email})
-        return Response({"detail": "Invalid credentials"}, status=status.HTTP_401_UNAUTHORIZED)
+            
+            # Return successful response
+            return Response({
+                'token': token.key,
+                'user_id': user.pk,
+                'username': user.username,
+                'email': user.email
+            })
+        
+        # Authentication failed
+        return Response({
+            "detail": "Invalid username or password"
+        }, status=status.HTTP_401_UNAUTHORIZED)
 
     @extend_schema(request=ForgotPasswordSerializer)
     @action(detail=False, methods=['post'])
