@@ -22,10 +22,17 @@ from .serializers import (
 )
 
 class ProjectViewSet(viewsets.ModelViewSet):
-    queryset = Project.objects.all()
     serializer_class = ProjectSerializer
     filter_backends = [filters.SearchFilter]
     search_fields = ['project_name', 'technology', 'description']
+
+    def get_queryset(self):
+        user = self.request.user
+        if user.is_authenticated:
+            # Show all public projects + user's own projects (public and private)
+            return Project.objects.filter(Q(is_private=False) | Q(owner=user))
+        # For unauthenticated users, show only public projects
+        return Project.objects.filter(is_private=False)
 
     @action(detail=False, methods=['get'])
     def my_repos(self, request):
@@ -61,8 +68,25 @@ class ProjectViewSet(viewsets.ModelViewSet):
         return Response({"is_pinned": project.is_pinned})
 
 class PostViewSet(viewsets.ModelViewSet):
-    queryset = Post.objects.all()
     serializer_class = PostSerializer
+
+    def get_queryset(self):
+        user = self.request.user
+        if user.is_authenticated:
+            # Show posts that are:
+            # 1. Linked to a public project
+            # 2. Not linked to any project
+            # 3. Created by the current user
+            # 4. (Optional) Linked to a project the user owns/collaborates on
+            # We'll follow the user's "Ellavarudeym [Everyone's] except login ee user [this user's] only public" 
+            # as a general rule for the feed.
+            return Post.objects.filter(
+                Q(project__is_private=False) | 
+                Q(project__isnull=True) | 
+                Q(user=user)
+            ).distinct()
+        # For anonymous users, only public posts
+        return Post.objects.filter(Q(project__is_private=False) | Q(project__isnull=True))
 
     @action(detail=True, methods=['post'])
     def like(self, request, pk=None):
