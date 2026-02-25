@@ -15,11 +15,27 @@ class UserSerializer(serializers.ModelSerializer):
 class ChatMessageSerializer(serializers.ModelSerializer):
     sender_name = serializers.CharField(source='sender.username', read_only=True)
     receiver_name = serializers.CharField(source='receiver.username', read_only=True)
+    receiver_username = serializers.CharField(write_only=True, required=False)
     
     class Meta:
         model = ChatMessage
-        fields = ['id', 'sender', 'sender_name', 'receiver', 'receiver_name', 'message', 'is_read', 'timestamp']
+        fields = ['id', 'sender', 'sender_name', 'receiver', 'receiver_name', 'receiver_username', 'message', 'is_read', 'timestamp']
         read_only_fields = ['sender']
+
+    def validate(self, attrs):
+        # Prevent messaging self
+        request = self.context.get('request')
+        if request and request.user:
+            receiver = attrs.get('receiver')
+            if receiver == request.user:
+                raise serializers.ValidationError({"detail": "You cannot send messages to yourself."})
+            
+            # If username is provided, we'll handle the lookup in perform_create, 
+            # but we can do a quick check here if receiver ID is 0 or missing
+            if not receiver and not attrs.get('receiver_username'):
+                raise serializers.ValidationError({"receiver": "Either receiver ID or receiver_username is required."})
+        
+        return attrs
 
 class ConnectionRequestSerializer(serializers.ModelSerializer):
     sender_name = serializers.CharField(source='sender.username', read_only=True)
@@ -85,11 +101,19 @@ class ProfileSerializer(serializers.ModelSerializer):
 class ProjectSerializer(serializers.ModelSerializer):
     owner_name = serializers.CharField(source='owner.username', read_only=True)
     collaborator_count = serializers.SerializerMethodField()
+    is_saved = serializers.SerializerMethodField()
     
     class Meta:
         model = Project
-        fields = ['id', 'owner', 'owner_name', 'project_name', 'slug', 'description', 'technology', 'project_zip', 'cover_image', 'is_private', 'is_pinned', 'collaborator_count', 'created_at']
+        fields = ['id', 'owner', 'owner_name', 'project_name', 'slug', 'description', 'technology', 'project_zip', 'cover_image', 'is_private', 'is_pinned', 'collaborator_count', 'is_saved', 'created_at']
         read_only_fields = ['owner']
+
+    @extend_schema_field(serializers.BooleanField())
+    def get_is_saved(self, obj) -> bool:
+        request = self.context.get('request')
+        if not request or not request.user.is_authenticated:
+            return False
+        return SavedProject.objects.filter(user=request.user, project=obj).exists()
 
     @extend_schema_field(serializers.IntegerField())
     def get_collaborator_count(self, obj) -> int:
@@ -99,10 +123,26 @@ class PostSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source='user.username', read_only=True)
     like_count = serializers.IntegerField(source='likes.count', read_only=True)
     comment_count = serializers.IntegerField(source='comments.count', read_only=True)
+    is_liked = serializers.SerializerMethodField()
+    is_saved = serializers.SerializerMethodField()
     
     class Meta:
         model = Post
-        fields = ['id', 'user', 'username', 'project', 'image', 'content', 'like_count', 'comment_count', 'created_at']
+        fields = ['id', 'user', 'username', 'project', 'image', 'content', 'like_count', 'comment_count', 'is_liked', 'is_saved', 'created_at']
+
+    @extend_schema_field(serializers.BooleanField())
+    def get_is_liked(self, obj) -> bool:
+        request = self.context.get('request')
+        if not request or not request.user.is_authenticated:
+            return False
+        return Like.objects.filter(post=obj, user=request.user).exists()
+
+    @extend_schema_field(serializers.BooleanField())
+    def get_is_saved(self, obj) -> bool:
+        request = self.context.get('request')
+        if not request or not request.user.is_authenticated:
+            return False
+        return SavedPost.objects.filter(user=request.user, post=obj).exists()
 
 class CommentSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source='user.username', read_only=True)
@@ -132,6 +172,20 @@ class InvitationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Invitation
         fields = ['id', 'project', 'project_name', 'sender_name', 'receiver', 'status', 'sent_at']
+
+class SavedProjectSerializer(serializers.ModelSerializer):
+    project_details = ProjectSerializer(source='project', read_only=True)
+    
+    class Meta:
+        model = SavedProject
+        fields = ['id', 'user', 'project', 'project_details', 'saved_at']
+
+class SavedPostSerializer(serializers.ModelSerializer):
+    post_details = PostSerializer(source='post', read_only=True)
+    
+    class Meta:
+        model = SavedPost
+        fields = ['id', 'user', 'post', 'post_details', 'saved_at']
 
 # --- Auth Serializers for Documentation ---
 

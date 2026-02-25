@@ -11,14 +11,16 @@ import string
 from django.utils.text import slugify
 from .models import (
     Profile, Project, Post, Comment, Like, Collaboration, Follower, 
-    Notification, Invitation, ChatMessage, ConnectionRequest
+    Notification, Invitation, ChatMessage, ConnectionRequest,
+    SavedProject, SavedPost
 )
 from .serializers import (
     UserSerializer, ProfileSerializer, ProjectSerializer, 
     PostSerializer, CommentSerializer, NotificationSerializer,
     CollaborationSerializer, InvitationSerializer,
     SignupSerializer, SigninSerializer, ForgotPasswordSerializer, ResetPasswordSerializer,
-    ChatMessageSerializer, ConnectionRequestSerializer
+    ChatMessageSerializer, ConnectionRequestSerializer,
+    SavedProjectSerializer, SavedPostSerializer
 )
 
 class ProjectViewSet(viewsets.ModelViewSet):
@@ -67,6 +69,25 @@ class ProjectViewSet(viewsets.ModelViewSet):
         project.save()
         return Response({"is_pinned": project.is_pinned})
 
+    @action(detail=True, methods=['post'])
+    def save_project(self, request, pk=None):
+        project = self.get_object()
+        if not request.user.is_authenticated:
+            return Response({"detail": "Not authenticated"}, status=status.HTTP_401_UNAUTHORIZED)
+        
+        saved, created = SavedProject.objects.get_or_create(user=request.user, project=project)
+        if not created:
+            saved.delete()
+            return Response({"detail": "Project removed from saved"})
+        
+        return Response({"detail": "Project saved successfully"})
+
+    @action(detail=False, methods=['get'], permission_classes=[permissions.IsAuthenticated])
+    def my_saved(self, request):
+        saved_projects = SavedProject.objects.filter(user=request.user)
+        serializer = SavedProjectSerializer(saved_projects, many=True, context={'request': request})
+        return Response(serializer.data)
+
 class PostViewSet(viewsets.ModelViewSet):
     serializer_class = PostSerializer
 
@@ -107,6 +128,25 @@ class PostViewSet(viewsets.ModelViewSet):
             message=f"{request.user.username} liked your post"
         )
         return Response({"detail": "Liked"})
+
+    @action(detail=True, methods=['post'])
+    def save_post(self, request, pk=None):
+        post = self.get_object()
+        if not request.user.is_authenticated:
+            return Response({"detail": "Not authenticated"}, status=status.HTTP_401_UNAUTHORIZED)
+        
+        saved, created = SavedPost.objects.get_or_create(user=request.user, post=post)
+        if not created:
+            saved.delete()
+            return Response({"detail": "Post removed from saved"})
+        
+        return Response({"detail": "Post saved successfully"})
+
+    @action(detail=False, methods=['get'], permission_classes=[permissions.IsAuthenticated])
+    def my_saved(self, request):
+        saved_posts = SavedPost.objects.filter(user=request.user)
+        serializer = SavedPostSerializer(saved_posts, many=True, context={'request': request})
+        return Response(serializer.data)
 
     @action(detail=True, methods=['post'])
     def comment(self, request, pk=None):
@@ -422,12 +462,26 @@ class ChatMessageViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
     serializer_class = ChatMessageSerializer
 
-    def get_queryset(self):
-        user = self.request.user
-        return ChatMessage.objects.filter(Q(sender=user) | Q(receiver=user))
-
     def perform_create(self, serializer):
-        serializer.save(sender=self.request.user)
+        receiver_id = self.request.data.get('receiver')
+        receiver_username = self.request.data.get('receiver_username')
+        
+        receiver = None
+        
+        # If receiver is 0 or invalid, try to find by username
+        if receiver_id and str(receiver_id) != '0':
+            receiver = User.objects.filter(id=receiver_id).first()
+        
+        if not receiver and receiver_username:
+            receiver = User.objects.filter(username=receiver_username).first()
+            
+        if not receiver:
+            raise serializers.ValidationError({"receiver": "Valid receiver ID or username is required. ID 0 is invalid."})
+
+        if receiver == self.request.user:
+            raise serializers.ValidationError({"detail": "You cannot message yourself."})
+
+        serializer.save(sender=self.request.user, receiver=receiver)
 
     @action(detail=False, methods=['get'])
     def conversation(self, request):

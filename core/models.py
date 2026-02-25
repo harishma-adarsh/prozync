@@ -118,3 +118,25 @@ class ConnectionRequest(models.Model):
     def __str__(self):
         return f"{self.sender.username} -> {self.receiver.username} ({self.status})"
 
+class SavedProject(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='saved_projects')
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='saved_by_users')
+    saved_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('user', 'project')
+
+    def __str__(self):
+        return f"{self.user.username} saved {self.project.project_name}"
+
+class SavedPost(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='saved_posts')
+    post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name='saved_by_users')
+    saved_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('user', 'post')
+
+    def __str__(self):
+        return f"{self.user.username} saved post {self.post.id}"
+
