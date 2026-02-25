@@ -7,9 +7,9 @@ from .views import (
 from rest_framework.authtoken.views import obtain_auth_token
 
 router = DefaultRouter()
-router.register(r'projects', ProjectViewSet)
-router.register(r'profiles', ProfileViewSet)
-router.register(r'posts', PostViewSet)
+router.register(r'projects', ProjectViewSet, basename='project')
+router.register(r'profiles', ProfileViewSet, basename='profile')
+router.register(r'posts', PostViewSet, basename='post')
 router.register(r'notifications', NotificationViewSet, basename='notification')
 router.register(r'messages', ChatMessageViewSet, basename='message')
 router.register(r'invitations', InvitationViewSet, basename='invitation')
