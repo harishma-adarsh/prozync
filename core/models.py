@@ -139,4 +139,3 @@ class SavedPost(models.Model):
 
     def __str__(self):
         return f"{self.user.username} saved post {self.post.id}"
-

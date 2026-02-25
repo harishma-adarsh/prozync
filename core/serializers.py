@@ -4,7 +4,8 @@ from rest_framework import serializers
 from drf_spectacular.utils import extend_schema_field
 from .models import (
     Profile, Project, Post, Comment, Like, Collaboration, Follower, 
-    Notification, Invitation, ChatMessage, ConnectionRequest
+    Notification, Invitation, ChatMessage, ConnectionRequest,
+    SavedProject, SavedPost
 )
 
 class UserSerializer(serializers.ModelSerializer):
