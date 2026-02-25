@@ -25,6 +25,7 @@ class Project(models.Model):
     project_zip = models.FileField(upload_to='project_files/', blank=True, null=True) # For ZIP upload
     cover_image = models.ImageField(upload_to='project_covers/', blank=True, null=True)
     is_private = models.BooleanField(default=False)
+    is_pinned = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):

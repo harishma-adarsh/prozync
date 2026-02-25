@@ -88,7 +88,8 @@ class ProjectSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Project
-        fields = ['id', 'owner', 'owner_name', 'project_name', 'slug', 'description', 'technology', 'project_zip', 'cover_image', 'is_private', 'collaborator_count', 'created_at']
+        fields = ['id', 'owner', 'owner_name', 'project_name', 'slug', 'description', 'technology', 'project_zip', 'cover_image', 'is_private', 'is_pinned', 'collaborator_count', 'created_at']
+        read_only_fields = ['owner']
 
     @extend_schema_field(serializers.IntegerField())
     def get_collaborator_count(self, obj) -> int:

@@ -8,6 +8,7 @@ from django.core.mail import send_mail
 from django.utils import timezone
 import random
 import string
+from django.utils.text import slugify
 from .models import (
     Profile, Project, Post, Comment, Like, Collaboration, Follower, 
     Notification, Invitation, ChatMessage, ConnectionRequest
@@ -33,6 +34,31 @@ class ProjectViewSet(viewsets.ModelViewSet):
             serializer = self.get_serializer(projects, many=True)
             return Response(serializer.data)
         return Response({"detail": "Not authenticated"}, status=status.HTTP_401_UNAUTHORIZED)
+
+    def perform_create(self, serializer):
+        project_name = self.request.data.get('project_name')
+        slug = self.request.data.get('slug')
+        
+        if not slug and project_name:
+            # Generate a unique slug
+            base_slug = slugify(project_name)
+            slug = base_slug
+            counter = 1
+            while Project.objects.filter(slug=slug).exists():
+                slug = f"{base_slug}-{counter}"
+                counter += 1
+        
+        serializer.save(owner=self.request.user, slug=slug)
+
+    @action(detail=True, methods=['post'])
+    def pin(self, request, pk=None):
+        project = self.get_object()
+        if project.owner != request.user:
+            return Response({"detail": "You do not have permission to pin this project."}, status=status.HTTP_403_FORBIDDEN)
+        
+        project.is_pinned = not project.is_pinned
+        project.save()
+        return Response({"is_pinned": project.is_pinned})
 
 class PostViewSet(viewsets.ModelViewSet):
     queryset = Post.objects.all()
@@ -64,7 +90,7 @@ class PostViewSet(viewsets.ModelViewSet):
         if not request.user.is_authenticated:
             return Response({"detail": "Not authenticated"}, status=status.HTTP_401_UNAUTHORIZED)
         
-        comment_text = request.data.get('comment_text')
+        comment_text = request.data.get('comment_text') or request.data.get('comment')
         if not comment_text:
             return Response({"detail": "Comment text is required"}, status=status.HTTP_400_BAD_REQUEST)
         
@@ -351,6 +377,22 @@ class AuthViewSet(viewsets.ViewSet):
         
         return Response({"detail": "Password reset successful"}, status=status.HTTP_200_OK)
 
+    @action(detail=False, methods=['post'], permission_classes=[permissions.IsAuthenticated])
+    def change_password(self, request):
+        old_password = request.data.get('old_password')
+        new_password = request.data.get('new_password')
+        
+        if not old_password or not new_password:
+            return Response({"detail": "Missing fields"}, status=status.HTTP_400_BAD_REQUEST)
+            
+        user = request.user
+        if not user.check_password(old_password):
+            return Response({"detail": "Incorrect old password"}, status=status.HTTP_400_BAD_REQUEST)
+            
+        user.set_password(new_password)
+        user.save()
+        return Response({"detail": "Password updated successfully"}, status=status.HTTP_200_OK)
+
 class ChatMessageViewSet(viewsets.ModelViewSet):
     queryset = ChatMessage.objects.all()
     permission_classes = [permissions.IsAuthenticated]
@@ -422,11 +464,11 @@ class InvitationViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['post'])
     def invite(self, request):
-        project_id = request.data.get('project_id')
-        user_id = request.data.get('user_id')
+        project_id = request.data.get('project_id') or request.data.get('project')
+        user_id = request.data.get('user_id') or request.data.get('receiver')
         
         if not project_id or not user_id:
-            return Response({"detail": "project_id and user_id are required"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"detail": "project_id (or project) and user_id (or receiver) are required"}, status=status.HTTP_400_BAD_REQUEST)
             
         project = Project.objects.filter(id=project_id, owner=request.user).first()
         if not project:

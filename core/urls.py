@@ -22,4 +22,5 @@ urlpatterns = [
     path('auth/login/', obtain_auth_token, name='login'),
     path('auth/forgot-password/', AuthViewSet.as_view({'post': 'forgot_password'}), name='forgot_password'),
     path('auth/reset-password/', AuthViewSet.as_view({'post': 'reset_password'}), name='reset_password'),
+    path('auth/change-password/', AuthViewSet.as_view({'post': 'change_password'}), name='change_password'),
 ]
