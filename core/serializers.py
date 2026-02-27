@@ -188,7 +188,15 @@ class SavedPostSerializer(serializers.ModelSerializer):
         model = SavedPost
         fields = ['id', 'user', 'post', 'post_details', 'saved_at']
 
-# --- Auth Serializers for Documentation ---
+class ChangePasswordSerializer(serializers.Serializer):
+    current_password = serializers.CharField(write_only=True)
+    new_password = serializers.CharField(write_only=True)
+    confirm_password = serializers.CharField(write_only=True)
+
+    def validate(self, attrs):
+        if attrs['new_password'] != attrs['confirm_password']:
+            raise serializers.ValidationError({"confirm_password": "New passwords do not match."})
+        return attrs
 
 class SignupSerializer(serializers.Serializer):
     username = serializers.CharField(max_length=150)

@@ -18,7 +18,7 @@ from .serializers import (
     UserSerializer, ProfileSerializer, ProjectSerializer, 
     PostSerializer, CommentSerializer, NotificationSerializer,
     CollaborationSerializer, InvitationSerializer,
-    SignupSerializer, SigninSerializer, ForgotPasswordSerializer, ResetPasswordSerializer,
+    SignupSerializer, SigninSerializer, ForgotPasswordSerializer, ResetPasswordSerializer, ChangePasswordSerializer,
     ChatMessageSerializer, ConnectionRequestSerializer,
     SavedProjectSerializer, SavedPostSerializer
 )
@@ -446,27 +446,22 @@ class AuthViewSet(viewsets.ViewSet):
         
         return Response({"detail": "Password reset successful"}, status=status.HTTP_200_OK)
 
+    @extend_schema(request=ChangePasswordSerializer)
     @action(detail=False, methods=['post'], permission_classes=[permissions.IsAuthenticated])
     def change_password(self, request):
-        old_password = request.data.get('old_password')
-        new_password = request.data.get('new_password')
-        
-        if not old_password or not new_password:
-            return Response({"detail": "Missing fields. Required: 'old_password' and 'new_password'"}, status=status.HTTP_400_BAD_REQUEST)
+        serializer = ChangePasswordSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            
+        current_password = serializer.validated_data.get('current_password')
+        new_password = serializer.validated_data.get('new_password')
             
         user = request.user
-        
-        # Double check authentication (though get_permissions should handle it)
-        if not user.is_authenticated:
-            return Response({"detail": "Not authenticated"}, status=status.HTTP_401_UNAUTHORIZED)
-
-        if not user.check_password(old_password):
-            return Response({"detail": "Incorrect old password"}, status=status.HTTP_400_BAD_REQUEST)
+        if not user.check_password(current_password):
+            return Response({"current_password": "Incorrect current password"}, status=status.HTTP_400_BAD_REQUEST)
             
         user.set_password(new_password)
         user.save()
-        
-        # Optional: Return new token or session status
         return Response({"detail": "Password updated successfully"}, status=status.HTTP_200_OK)
 
 class ChatMessageViewSet(viewsets.ModelViewSet):
