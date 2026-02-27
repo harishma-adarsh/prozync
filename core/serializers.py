@@ -103,22 +103,30 @@ class ProjectSerializer(serializers.ModelSerializer):
     owner_name = serializers.CharField(source='owner.username', read_only=True)
     collaborator_count = serializers.SerializerMethodField()
     is_saved = serializers.SerializerMethodField()
-    cover_image = serializers.SerializerMethodField()
-
-    def get_cover_image(self, obj):
-        if obj.cover_image:
-            # Try to get request from context
-            request = self.context.get('request')
-            if request:
-                return request.build_absolute_uri(obj.cover_image.url)
-            # Fallback for localhost if request is missing
-            return f"http://127.0.0.1:8000{obj.cover_image.url}"
-        return None
-
     class Meta:
         model = Project
         fields = ['id', 'owner', 'owner_name', 'project_name', 'slug', 'description', 'technology', 'project_zip', 'cover_image', 'is_private', 'is_pinned', 'collaborator_count', 'is_saved', 'created_at']
         read_only_fields = ['owner', 'slug']
+
+    def to_representation(self, instance):
+        representation = super().to_representation(instance)
+        request = self.context.get('request')
+        
+        # Ensure cover_image has absolute URL
+        if instance.cover_image:
+            if request:
+                representation['cover_image'] = request.build_absolute_uri(instance.cover_image.url)
+            else:
+                representation['cover_image'] = f"http://127.0.0.1:8000{instance.cover_image.url}"
+        
+        # Also ensure project_zip has absolute URL
+        if instance.project_zip:
+            if request:
+                representation['project_zip'] = request.build_absolute_uri(instance.project_zip.url)
+            else:
+                representation['project_zip'] = f"http://127.0.0.1:8000{instance.project_zip.url}"
+                
+        return representation
 
     @extend_schema_field(serializers.BooleanField())
     def get_is_saved(self, obj) -> bool:
