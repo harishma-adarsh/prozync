@@ -271,6 +271,11 @@ class AuthViewSet(viewsets.ViewSet):
     permission_classes = [permissions.AllowAny]
     serializer_class = SignupSerializer
 
+    def get_permissions(self):
+        if self.action == 'change_password':
+            return [permissions.IsAuthenticated()]
+        return [permissions.AllowAny()]
+
     @extend_schema(request=SignupSerializer)
     @action(detail=False, methods=['post'])
     def signup(self, request):
@@ -421,7 +426,7 @@ class AuthViewSet(viewsets.ViewSet):
         profile = user.profile
         
         # Check if OTP matches
-        if profile.otp != otp:
+        if not profile.otp or profile.otp != otp:
             return Response({"detail": "Invalid OTP"}, status=status.HTTP_400_BAD_REQUEST)
         
         # Check if OTP is expired (e.g., 10 minutes)
@@ -447,14 +452,21 @@ class AuthViewSet(viewsets.ViewSet):
         new_password = request.data.get('new_password')
         
         if not old_password or not new_password:
-            return Response({"detail": "Missing fields"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"detail": "Missing fields. Required: 'old_password' and 'new_password'"}, status=status.HTTP_400_BAD_REQUEST)
             
         user = request.user
+        
+        # Double check authentication (though get_permissions should handle it)
+        if not user.is_authenticated:
+            return Response({"detail": "Not authenticated"}, status=status.HTTP_401_UNAUTHORIZED)
+
         if not user.check_password(old_password):
             return Response({"detail": "Incorrect old password"}, status=status.HTTP_400_BAD_REQUEST)
             
         user.set_password(new_password)
         user.save()
+        
+        # Optional: Return new token or session status
         return Response({"detail": "Password updated successfully"}, status=status.HTTP_200_OK)
 
 class ChatMessageViewSet(viewsets.ModelViewSet):

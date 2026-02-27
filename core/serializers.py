@@ -107,7 +107,7 @@ class ProjectSerializer(serializers.ModelSerializer):
     class Meta:
         model = Project
         fields = ['id', 'owner', 'owner_name', 'project_name', 'slug', 'description', 'technology', 'project_zip', 'cover_image', 'is_private', 'is_pinned', 'collaborator_count', 'is_saved', 'created_at']
-        read_only_fields = ['owner']
+        read_only_fields = ['owner', 'slug']
 
     @extend_schema_field(serializers.BooleanField())
     def get_is_saved(self, obj) -> bool:
