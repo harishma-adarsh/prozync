@@ -105,7 +105,7 @@ class ProjectSerializer(serializers.ModelSerializer):
     is_saved = serializers.SerializerMethodField()
     class Meta:
         model = Project
-        fields = ['id', 'owner', 'owner_name', 'project_name', 'slug', 'description', 'technology', 'project_zip', 'cover_image', 'is_private', 'is_pinned', 'collaborator_count', 'is_saved', 'created_at']
+        fields = ['id', 'owner', 'owner_name', 'project_name', 'slug', 'description', 'technology', 'project_zip', 'cover_image', 'is_private', 'is_pinned', 'collaborator_count', 'collaborators', 'is_saved', 'created_at']
         read_only_fields = ['owner', 'slug']
 
     def to_representation(self, instance):
@@ -139,16 +139,32 @@ class ProjectSerializer(serializers.ModelSerializer):
     def get_collaborator_count(self, obj) -> int:
         return obj.collaborators_list.count()
 
+    collaborators = CollaborationSerializer(source='collaborators_list', many=True, read_only=True)
+
 class PostSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source='user.username', read_only=True)
     like_count = serializers.IntegerField(source='likes.count', read_only=True)
     comment_count = serializers.IntegerField(source='comments.count', read_only=True)
     is_liked = serializers.SerializerMethodField()
     is_saved = serializers.SerializerMethodField()
+    tagged_users_details = UserSerializer(source='tagged_users', many=True, read_only=True)
     
     class Meta:
         model = Post
-        fields = ['id', 'user', 'username', 'project', 'image', 'content', 'like_count', 'comment_count', 'is_liked', 'is_saved', 'created_at']
+        fields = ['id', 'user', 'username', 'project', 'image', 'content', 'tagged_users', 'tagged_users_details', 'like_count', 'comment_count', 'is_liked', 'is_saved', 'created_at']
+
+    def to_representation(self, instance):
+        representation = super().to_representation(instance)
+        request = self.context.get('request')
+        
+        # Ensure image has absolute URL
+        if instance.image:
+            if request:
+                representation['image'] = request.build_absolute_uri(instance.image.url)
+            else:
+                representation['image'] = f"http://127.0.0.1:8000{instance.image.url}"
+                
+        return representation
 
     @extend_schema_field(serializers.BooleanField())
     def get_is_liked(self, obj) -> bool:
@@ -176,7 +192,7 @@ class NotificationSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Notification
-        fields = ['id', 'sender', 'sender_name', 'receiver', 'status', 'post', 'project', 'message', 'is_read', 'created_at']
+        fields = ['id', 'sender', 'sender_name', 'receiver', 'notification_type', 'post', 'project', 'invitation', 'connection_request', 'message', 'is_read', 'created_at']
 
 class CollaborationSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source='user.username', read_only=True)

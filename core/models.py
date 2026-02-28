@@ -36,6 +36,7 @@ class Post(models.Model):
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='posts', null=True, blank=True)
     image = models.ImageField(upload_to='post_images/', blank=True, null=True)
     content = models.TextField() # Diagram says 'name' but usually it's content
+    tagged_users = models.ManyToManyField(User, related_name='tagged_in_posts', blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
@@ -73,16 +74,23 @@ class Follower(models.Model):
         unique_together = ('follower', 'following')
 
 class Notification(models.Model):
-    STATUS_CHOICES = [
-        ('PENDING', 'Pending'),
-        ('ACCEPTED', 'Accepted'),
-        ('REJECTED', 'Rejected'),
+    NOTIFICATION_TYPES = [
+        ('FOLLOW', 'New Follower'),
+        ('LIKE', 'Post Like'),
+        ('COMMENT', 'Post Comment'),
+        ('CONNECTION_REQUEST', 'Connection Request'),
+        ('COLLAB_INVITATION', 'Collaboration Invitation'),
+        ('TAG', 'User Tag'),
+        ('ACCEPT_COLLAB', 'Collaboration Accepted'),
+        ('ACCEPT_CONNECTION', 'Connection Accepted'),
     ]
     sender = models.ForeignKey(User, on_delete=models.CASCADE, related_name='sent_notifications')
     receiver = models.ForeignKey(User, on_delete=models.CASCADE, related_name='received_notifications')
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
+    notification_type = models.CharField(max_length=30, choices=NOTIFICATION_TYPES, default='TAG')
     post = models.ForeignKey(Post, on_delete=models.SET_NULL, null=True, blank=True)
     project = models.ForeignKey(Project, on_delete=models.SET_NULL, null=True, blank=True)
+    invitation = models.ForeignKey('Invitation', on_delete=models.SET_NULL, null=True, blank=True)
+    connection_request = models.ForeignKey('ConnectionRequest', on_delete=models.SET_NULL, null=True, blank=True)
     message = models.CharField(max_length=255)
     is_read = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)

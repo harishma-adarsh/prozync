@@ -9,6 +9,7 @@ from django.utils import timezone
 import random
 import string
 from django.utils.text import slugify
+import re
 from .models import (
     Profile, Project, Post, Comment, Like, Collaboration, Follower, 
     Notification, Invitation, ChatMessage, ConnectionRequest,
@@ -91,6 +92,35 @@ class ProjectViewSet(viewsets.ModelViewSet):
 class PostViewSet(viewsets.ModelViewSet):
     serializer_class = PostSerializer
 
+    def perform_create(self, serializer):
+        # 1. Save the post first
+        post = serializer.save(user=self.request.user)
+        
+        # 2. Extract @mentions from content automatically
+        content = self.request.data.get('content', '')
+        mentioned_usernames = re.findall(r'@(\w+)', content)
+        mentioned_users = list(User.objects.filter(username__in=mentioned_usernames))
+        
+        # 3. Combine with explicitly tagged users sent in the 'tagged_users' field
+        # Use existing tags + the new mentions
+        current_tags = list(post.tagged_users.all())
+        final_tags = set(current_tags + mentioned_users)
+            
+        # 4. Save the final tags to the post
+        if final_tags:
+            post.tagged_users.set(list(final_tags))
+            
+        # 5. Create notifications for everyone tagged
+        for user in final_tags:
+            if user != self.request.user: # Don't notify self
+                Notification.objects.create(
+                    sender=self.request.user,
+                    receiver=user,
+                    post=post,
+                    notification_type='TAG',
+                    message=f"{self.request.user.username} tagged you in a post"
+                )
+
     def get_queryset(self):
         user = self.request.user
         if user.is_authenticated:
@@ -121,12 +151,14 @@ class PostViewSet(viewsets.ModelViewSet):
             return Response({"detail": "Unliked"})
         
         # Notify
-        Notification.objects.create(
-            sender=request.user,
-            receiver=post.user,
-            post=post,
-            message=f"{request.user.username} liked your post"
-        )
+        if post.user != request.user:
+            Notification.objects.create(
+                sender=request.user,
+                receiver=post.user,
+                post=post,
+                notification_type='LIKE',
+                message=f"{request.user.username} liked your post"
+            )
         return Response({"detail": "Liked"})
 
     @action(detail=True, methods=['post'])
@@ -166,6 +198,7 @@ class PostViewSet(viewsets.ModelViewSet):
                 sender=request.user,
                 receiver=post.user,
                 post=post,
+                notification_type='COMMENT',
                 message=f"{request.user.username} commented on your post"
             )
             
@@ -221,6 +254,7 @@ class ProfileViewSet(viewsets.ModelViewSet):
         Notification.objects.create(
             sender=request.user,
             receiver=profile.user,
+            notification_type='FOLLOW',
             message=f"{request.user.username} started following you"
         )
         return Response({"detail": "Followed"})
@@ -254,10 +288,19 @@ class ProfileViewSet(viewsets.ModelViewSet):
         Notification.objects.create(
             sender=request.user,
             receiver=profile.user,
+            notification_type='CONNECTION_REQUEST',
+            connection_request=con_request,
             message=f"{request.user.username} sent you a connection request"
         )
         
         return Response(ConnectionRequestSerializer(con_request).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=False, methods=['get'])
+    def taggable_users(self, request):
+        """Returns a list of all users for tagging section"""
+        users = User.objects.all().only('id', 'username').order_by('username')
+        data = [{"id": u.id, "username": u.username} for u in users]
+        return Response(data)
 
 class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Notification.objects.all()
@@ -536,6 +579,7 @@ class InvitationViewSet(viewsets.ModelViewSet):
                 sender=request.user,
                 receiver=invitation.project.owner,
                 project=invitation.project,
+                notification_type='ACCEPT_COLLAB',
                 message=f"{request.user.username} accepted your invitation to {invitation.project.project_name}"
             )
             
@@ -563,6 +607,9 @@ class InvitationViewSet(viewsets.ModelViewSet):
         if not receiver:
             return Response({"detail": "User to invite not found"}, status=status.HTTP_404_NOT_FOUND)
             
+        if receiver == request.user:
+            return Response({"detail": "You cannot invite yourself to your own project"}, status=status.HTTP_400_BAD_REQUEST)
+            
         invitation, created = Invitation.objects.get_or_create(
             project=project,
             receiver=receiver,
@@ -576,6 +623,8 @@ class InvitationViewSet(viewsets.ModelViewSet):
             sender=request.user,
             receiver=receiver,
             project=project,
+            invitation=invitation,
+            notification_type='COLLAB_INVITATION',
             message=f"{request.user.username} invited you to collaborate on {project.project_name}"
         )
         
@@ -602,6 +651,7 @@ class ConnectionRequestViewSet(viewsets.ModelViewSet):
             Notification.objects.create(
                 sender=request.user,
                 receiver=con_request.sender,
+                notification_type='ACCEPT_CONNECTION',
                 message=f"{request.user.username} accepted your connection request"
             )
             
