@@ -47,16 +47,24 @@ class ConnectionRequestSerializer(serializers.ModelSerializer):
         fields = ['id', 'sender', 'sender_name', 'receiver', 'receiver_name', 'status', 'created_at']
         read_only_fields = ['sender', 'status']
 
+class CollaborationSerializer(serializers.ModelSerializer):
+    username = serializers.CharField(source='user.username', read_only=True)
+    
+    class Meta:
+        model = Collaboration
+        fields = ['id', 'project', 'user', 'username', 'role', 'joined_at']
+
 class ProfileSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source='user.username', read_only=True)
     email = serializers.EmailField(source='user.email', required=False)
     follower_count = serializers.SerializerMethodField()
     repo_count = serializers.SerializerMethodField()
     connection_status = serializers.SerializerMethodField()
+    is_following = serializers.SerializerMethodField()
     
     class Meta:
         model = Profile
-        fields = ['id', 'user', 'username', 'email', 'full_name', 'phone', 'bio', 'profession', 'profile_pic', 'follower_count', 'repo_count', 'connection_status']
+        fields = ['id', 'user', 'username', 'email', 'full_name', 'phone', 'bio', 'profession', 'profile_pic', 'follower_count', 'repo_count', 'connection_status', 'is_following']
 
     def update(self, instance, validated_data):
         user_data = validated_data.pop('user', {})
@@ -98,6 +106,13 @@ class ProfileSerializer(serializers.ModelSerializer):
             return "PENDING_RECEIVED"
             
         return "NONE"
+
+    @extend_schema_field(serializers.BooleanField())
+    def get_is_following(self, obj) -> bool:
+        request = self.context.get('request')
+        if not request or not request.user.is_authenticated:
+            return False
+        return Follower.objects.filter(follower=request.user, following=obj.user).exists()
 
 class ProjectSerializer(serializers.ModelSerializer):
     owner_name = serializers.CharField(source='owner.username', read_only=True)
@@ -148,10 +163,12 @@ class PostSerializer(serializers.ModelSerializer):
     is_liked = serializers.SerializerMethodField()
     is_saved = serializers.SerializerMethodField()
     tagged_users_details = UserSerializer(source='tagged_users', many=True, read_only=True)
+    mentioned_user_ids = serializers.SerializerMethodField()
+    is_following_author = serializers.SerializerMethodField()
     
     class Meta:
         model = Post
-        fields = ['id', 'user', 'username', 'project', 'image', 'content', 'tagged_users', 'tagged_users_details', 'like_count', 'comment_count', 'is_liked', 'is_saved', 'created_at']
+        fields = ['id', 'user', 'username', 'project', 'image', 'content', 'tagged_users', 'tagged_users_details', 'mentioned_user_ids', 'is_following_author', 'like_count', 'comment_count', 'is_liked', 'is_saved', 'created_at']
 
     def to_representation(self, instance):
         representation = super().to_representation(instance)
@@ -180,6 +197,22 @@ class PostSerializer(serializers.ModelSerializer):
             return False
         return SavedPost.objects.filter(user=request.user, post=obj).exists()
 
+    @extend_schema_field(serializers.ListField(child=serializers.IntegerField()))
+    def get_mentioned_user_ids(self, obj):
+        import re
+        content = obj.content
+        usernames = re.findall(r'@(\w+)', content)
+        return list(User.objects.filter(username__in=usernames).values_list('id', flat=True))
+
+    @extend_schema_field(serializers.BooleanField())
+    def get_is_following_author(self, obj) -> bool:
+        request = self.context.get('request')
+        if not request or not request.user.is_authenticated:
+            return False
+        if request.user == obj.user:
+            return False
+        return Follower.objects.filter(follower=request.user, following=obj.user).exists()
+
 class CommentSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source='user.username', read_only=True)
     
@@ -194,12 +227,6 @@ class NotificationSerializer(serializers.ModelSerializer):
         model = Notification
         fields = ['id', 'sender', 'sender_name', 'receiver', 'notification_type', 'post', 'project', 'invitation', 'connection_request', 'message', 'is_read', 'created_at']
 
-class CollaborationSerializer(serializers.ModelSerializer):
-    username = serializers.CharField(source='user.username', read_only=True)
-    
-    class Meta:
-        model = Collaboration
-        fields = ['id', 'project', 'user', 'username', 'role', 'joined_at']
 
 class InvitationSerializer(serializers.ModelSerializer):
     project_name = serializers.CharField(source='project.project_name', read_only=True)
@@ -238,6 +265,15 @@ class SignupSerializer(serializers.Serializer):
     email = serializers.EmailField()
     password = serializers.CharField(write_only=True)
     full_name = serializers.CharField(max_length=200, required=False)
+
+    def validate_password(self, value):
+        if len(value) < 6:
+            raise serializers.ValidationError("Password must be at least 6 characters long.")
+        if not any(char.isalpha() for char in value):
+            raise serializers.ValidationError("Password must contain at least one alphabet.")
+        if not any(char.isdigit() for char in value):
+            raise serializers.ValidationError("Password must contain at least one number.")
+        return value
 
 class SigninSerializer(serializers.Serializer):
     username = serializers.CharField()

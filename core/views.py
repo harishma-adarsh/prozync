@@ -26,8 +26,10 @@ from .serializers import (
 
 class ProjectViewSet(viewsets.ModelViewSet):
     serializer_class = ProjectSerializer
-    filter_backends = [filters.SearchFilter]
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['project_name', 'technology', 'description']
+    ordering_fields = ['created_at', 'project_name']
+    ordering = ['-created_at']
 
     def get_queryset(self):
         user = self.request.user
@@ -192,7 +194,12 @@ class PostViewSet(viewsets.ModelViewSet):
         
         comment = Comment.objects.create(post=post, user=request.user, comment_text=comment_text)
         
+        # Extract @mentions from comment
+        mentioned_usernames = re.findall(r'@(\w+)', comment_text)
+        mentioned_users = User.objects.filter(username__in=mentioned_usernames)
+        
         # Notify
+        # 1. Notify post owner
         if post.user != request.user:
             Notification.objects.create(
                 sender=request.user,
@@ -201,6 +208,17 @@ class PostViewSet(viewsets.ModelViewSet):
                 notification_type='COMMENT',
                 message=f"{request.user.username} commented on your post"
             )
+        
+        # 2. Notify mentioned users
+        for mentioned_user in mentioned_users:
+            if mentioned_user != request.user and mentioned_user != post.user:
+                Notification.objects.create(
+                    sender=request.user,
+                    receiver=mentioned_user,
+                    post=post,
+                    notification_type='TAG',
+                    message=f"{request.user.username} mentioned you in a comment"
+                )
             
         return Response(CommentSerializer(comment).data, status=status.HTTP_201_CREATED)
 
@@ -324,16 +342,14 @@ class AuthViewSet(viewsets.ViewSet):
     def signup(self, request):
         from django.db import transaction
         
-        username = request.data.get('username')
-        email = request.data.get('email')
-        password = request.data.get('password')
-        full_name = request.data.get('full_name', '')
-        
-        # Validate required fields
-        if not username or not email or not password:
-            return Response({
-                "detail": "Username, email, and password are required"
-            }, status=status.HTTP_400_BAD_REQUEST)
+        serializer = SignupSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            
+        username = serializer.validated_data.get('username')
+        email = serializer.validated_data.get('email')
+        password = serializer.validated_data.get('password')
+        full_name = serializer.validated_data.get('full_name', '')
         
         # Check if username already exists
         if User.objects.filter(username=username).exists():
@@ -350,22 +366,38 @@ class AuthViewSet(viewsets.ViewSet):
         # Create user and profile in a transaction
         try:
             with transaction.atomic():
-                # Create user with hashed password
+                # Create user but set is_active=False until OTP is verified
                 user = User.objects.create_user(
                     username=username,
                     email=email,
-                    password=password
+                    password=password,
+                    is_active=False 
                 )
                 
-                # Profile will be created automatically by signal
-                # But we'll update the full_name if provided
+                # Profile update
+                profile = user.profile
                 if full_name:
-                    profile = user.profile
                     profile.full_name = full_name
-                    profile.save()
+                
+                # Generate 6-digit OTP for signup
+                otp = ''.join(random.choices(string.digits, k=6))
+                profile.otp = otp
+                profile.otp_created_at = timezone.now()
+                profile.save()
+                
+                # Send Email
+                subject = 'Welcome to ProSync - Verify Your Email'
+                message = f'Your verification OTP is: {otp}. It will expire in 10 minutes.'
+                from_email = 'no-reply@prosync.com'
+                recipient_list = [email]
+                
+                try:
+                    send_mail(subject, message, from_email, recipient_list)
+                except:
+                    pass # Continue even if mail fails in dev
                 
                 return Response({
-                    "detail": "Registration successful",
+                    "detail": "Registration initiated. Please verify the OTP sent to your email.",
                     "username": user.username,
                     "email": user.email
                 }, status=status.HTTP_201_CREATED)
@@ -374,6 +406,41 @@ class AuthViewSet(viewsets.ViewSet):
             return Response({
                 "detail": f"Registration failed: {str(e)}"
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=False, methods=['post'])
+    def verify_signup_otp(self, request):
+        email = request.data.get('email')
+        otp = request.data.get('otp')
+        
+        if not email or not otp:
+            return Response({"detail": "Email and OTP are required"}, status=status.HTTP_400_BAD_REQUEST)
+            
+        user = User.objects.filter(email=email).first()
+        if not user:
+            return Response({"detail": "User not found"}, status=status.HTTP_404_NOT_FOUND)
+            
+        profile = user.profile
+        
+        # Check if OTP matches
+        if not profile.otp or profile.otp != otp:
+            return Response({"detail": "Invalid OTP"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Check if OTP is expired (10 minutes)
+        if profile.otp_created_at:
+            expiry_time = profile.otp_created_at + timezone.timedelta(minutes=10)
+            if timezone.now() > expiry_time:
+                return Response({"detail": "OTP has expired"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Activate user
+        user.is_active = True
+        user.save()
+        
+        # Clear OTP
+        profile.otp = None
+        profile.otp_created_at = None
+        profile.save()
+        
+        return Response({"detail": "Email verified successfully. You can now log in."}, status=status.HTTP_200_OK)
 
     @extend_schema(request=SigninSerializer)
     @action(detail=False, methods=['post'])

@@ -18,6 +18,7 @@ router.register(r'connections', ConnectionRequestViewSet, basename='connection')
 urlpatterns = [
     path('', include(router.urls)),
     path('auth/signup/', AuthViewSet.as_view({'post': 'signup'}), name='signup'),
+    path('auth/verify-signup-otp/', AuthViewSet.as_view({'post': 'verify_signup_otp'}), name='verify_signup_otp'),
     path('auth/signin/', AuthViewSet.as_view({'post': 'signin'}), name='signin'),
     path('auth/login/', obtain_auth_token, name='login'),
     path('auth/forgot-password/', AuthViewSet.as_view({'post': 'forgot_password'}), name='forgot_password'),
