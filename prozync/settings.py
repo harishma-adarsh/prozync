@@ -65,13 +65,16 @@ TEMPLATES = [
 WSGI_APPLICATION = 'prozync.wsgi.application'
 
 # Database
-# Use dj-database-url to pull from DATABASE_URL env var on Render, fallback to sqlite locally
 DATABASES = {
     'default': dj_database_url.config(
         default=f'sqlite:///{BASE_DIR}/db.sqlite3',
         conn_max_age=600
     )
 }
+
+# Use SSL for PostgreSQL (required by Render for external connections)
+if DATABASES['default']['ENGINE'] == 'django.db.backends.postgresql':
+    DATABASES['default']['OPTIONS'] = {'sslmode': 'require'}
 
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
