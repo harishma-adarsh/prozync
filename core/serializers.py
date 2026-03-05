@@ -60,11 +60,23 @@ class ProfileSerializer(serializers.ModelSerializer):
     follower_count = serializers.SerializerMethodField()
     repo_count = serializers.SerializerMethodField()
     connection_status = serializers.SerializerMethodField()
-    is_following = serializers.SerializerMethodField()
+    recent_projects = serializers.SerializerMethodField()
     
     class Meta:
         model = Profile
-        fields = ['id', 'user', 'username', 'email', 'full_name', 'phone', 'bio', 'profession', 'profile_pic', 'follower_count', 'repo_count', 'connection_status', 'is_following']
+        fields = ['id', 'user', 'username', 'email', 'full_name', 'phone', 'bio', 'profession', 'profile_pic', 'follower_count', 'repo_count', 'connection_status', 'is_following', 'can_follow', 'recent_projects']
+
+    @extend_schema_field(serializers.BooleanField())
+    def get_can_follow(self, obj) -> bool:
+        request = self.context.get('request')
+        if not request or not request.user.is_authenticated:
+            return False
+        return request.user != obj.user
+
+    @extend_schema_field(serializers.ListField(child=serializers.DictField()))
+    def get_recent_projects(self, obj):
+        projects = Project.objects.filter(owner=obj.user).order_by('-created_at')[:5]
+        return ProjectSerializer(projects, many=True, context=self.context).data
 
     def update(self, instance, validated_data):
         user_data = validated_data.pop('user', {})
@@ -120,9 +132,16 @@ class ProjectSerializer(serializers.ModelSerializer):
     is_saved = serializers.SerializerMethodField()
     is_interested = serializers.SerializerMethodField()
     interested_count = serializers.SerializerMethodField()
+    can_interest = serializers.SerializerMethodField()
+    owner_follower_count = serializers.SerializerMethodField(source='get_owner_follower_count')
+    owner_repo_count = serializers.SerializerMethodField(source='get_owner_repo_count')
+    owner_connection_status = serializers.SerializerMethodField(source='get_owner_connection_status')
+    is_following_owner = serializers.SerializerMethodField(source='get_is_following_owner')
+    can_follow_owner = serializers.SerializerMethodField(source='get_can_follow_owner')
+    owner_recent_projects = serializers.SerializerMethodField(source='get_owner_recent_projects')
     class Meta:
         model = Project
-        fields = ['id', 'owner', 'owner_name', 'project_name', 'slug', 'description', 'technology', 'project_zip', 'cover_image', 'is_private', 'is_pinned', 'collaborator_count', 'collaborators', 'is_saved', 'is_interested', 'interested_count', 'created_at']
+        fields = ['id', 'owner', 'owner_name', 'project_name', 'slug', 'description', 'technology', 'project_zip', 'cover_image', 'is_private', 'is_pinned', 'collaborator_count', 'collaborators', 'is_saved', 'is_interested', 'interested_count', 'can_interest', 'owner_follower_count', 'owner_repo_count', 'owner_connection_status', 'is_following_owner', 'can_follow_owner', 'owner_recent_projects', 'created_at']
         read_only_fields = ['owner', 'slug']
 
     def to_representation(self, instance):
@@ -163,6 +182,65 @@ class ProjectSerializer(serializers.ModelSerializer):
     @extend_schema_field(serializers.IntegerField())
     def get_interested_count(self, obj) -> int:
         return obj.interested_users.count()
+    
+    @extend_schema_field(serializers.BooleanField())
+    def get_can_interest(self, obj) -> bool:
+        request = self.context.get('request')
+        if not request or not request.user.is_authenticated:
+            return False
+        return request.user != obj.owner
+
+    @extend_schema_field(serializers.IntegerField())
+    def get_owner_follower_count(self, obj) -> int:
+        return obj.owner.follower_set.count()
+
+    @extend_schema_field(serializers.IntegerField())
+    def get_owner_repo_count(self, obj) -> int:
+        return obj.owner.owned_projects.count()
+
+    @extend_schema_field(serializers.CharField())
+    def get_owner_connection_status(self, obj) -> str:
+        request = self.context.get('request')
+        if not request or not request.user.is_authenticated:
+            return None
+        if request.user == obj.owner:
+            return "SELF"
+        from .models import ConnectionRequest
+        rel = ConnectionRequest.objects.filter(
+            (Q(sender=request.user, receiver=obj.owner)) |
+            (Q(sender=obj.owner, receiver=request.user))
+        ).first()
+        if rel:
+            if rel.status == 'ACCEPTED': return "CONNECTED"
+            if rel.sender == request.user: return "PENDING_SENT"
+            return "PENDING_RECEIVED"
+        return "NONE"
+
+    @extend_schema_field(serializers.BooleanField())
+    def get_is_following_owner(self, obj) -> bool:
+        request = self.context.get('request')
+        if not request or not request.user.is_authenticated:
+            return False
+        return Follower.objects.filter(follower=request.user, following=obj.owner).exists()
+
+    @extend_schema_field(serializers.BooleanField())
+    def get_can_follow_owner(self, obj) -> bool:
+        request = self.context.get('request')
+        if not request or not request.user.is_authenticated:
+            return False
+        return request.user != obj.owner
+
+    @extend_schema_field(serializers.ListField(child=serializers.DictField()))
+    def get_owner_recent_projects(self, obj):
+        projects = Project.objects.filter(owner=obj.owner).order_by('-created_at')[:5]
+        return ProjectSerializer(projects, many=True, context=self.context).data
+    
+    @extend_schema_field(serializers.BooleanField())
+    def get_can_interest(self, obj) -> bool:
+        request = self.context.get('request')
+        if not request or not request.user.is_authenticated:
+            return False
+        return request.user != obj.owner
 
     @extend_schema_field(serializers.IntegerField())
     def get_collaborator_count(self, obj) -> int:
@@ -179,10 +257,12 @@ class PostSerializer(serializers.ModelSerializer):
     tagged_users_details = UserSerializer(source='tagged_users', many=True, read_only=True)
     mentioned_user_ids = serializers.SerializerMethodField()
     is_following_author = serializers.SerializerMethodField()
+    author_profile_pic = serializers.SerializerMethodField()
+    can_follow_author = serializers.SerializerMethodField()
     
     class Meta:
         model = Post
-        fields = ['id', 'user', 'username', 'project', 'image', 'content', 'tagged_users', 'tagged_users_details', 'mentioned_user_ids', 'is_following_author', 'like_count', 'comment_count', 'is_liked', 'is_saved', 'created_at']
+        fields = ['id', 'user', 'username', 'author_profile_pic', 'project', 'image', 'content', 'tagged_users', 'tagged_users_details', 'mentioned_user_ids', 'is_following_author', 'can_follow_author', 'like_count', 'comment_count', 'is_liked', 'is_saved', 'created_at']
 
     def to_representation(self, instance):
         representation = super().to_representation(instance)
@@ -227,6 +307,22 @@ class PostSerializer(serializers.ModelSerializer):
             return False
         return Follower.objects.filter(follower=request.user, following=obj.user).exists()
 
+    @extend_schema_field(serializers.CharField())
+    def get_author_profile_pic(self, obj):
+        request = self.context.get('request')
+        if hasattr(obj.user, 'profile') and obj.user.profile.profile_pic:
+            if request:
+                return request.build_absolute_uri(obj.user.profile.profile_pic.url)
+            return obj.user.profile.profile_pic.url
+        return None
+
+    @extend_schema_field(serializers.BooleanField())
+    def get_can_follow_author(self, obj) -> bool:
+        request = self.context.get('request')
+        if not request or not request.user.is_authenticated:
+            return False
+        return request.user != obj.user
+
 class CommentSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source='user.username', read_only=True)
     
@@ -251,18 +347,20 @@ class InvitationSerializer(serializers.ModelSerializer):
         fields = ['id', 'project', 'project_name', 'sender_name', 'receiver', 'status', 'sent_at']
 
 class SavedProjectSerializer(serializers.ModelSerializer):
-    project_details = ProjectSerializer(source='project', read_only=True)
+    owner_name = serializers.CharField(source='project.owner.username', read_only=True)
+    saver_username = serializers.CharField(source='user.username', read_only=True)
     
     class Meta:
         model = SavedProject
-        fields = ['id', 'user', 'project', 'project_details', 'saved_at']
+        fields = ['id', 'user', 'saver_username', 'project', 'owner_name', 'project_details', 'saved_at']
 
 class SavedPostSerializer(serializers.ModelSerializer):
-    post_details = PostSerializer(source='post', read_only=True)
+    post_author = serializers.CharField(source='post.user.username', read_only=True)
+    saver_username = serializers.CharField(source='user.username', read_only=True)
     
     class Meta:
         model = SavedPost
-        fields = ['id', 'user', 'post', 'post_details', 'saved_at']
+        fields = ['id', 'user', 'saver_username', 'post', 'post_author', 'post_details', 'saved_at']
 
 class ChangePasswordSerializer(serializers.Serializer):
     current_password = serializers.CharField(write_only=True)

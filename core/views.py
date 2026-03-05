@@ -13,7 +13,7 @@ import re
 from .models import (
     Profile, Project, Post, Comment, Like, Collaboration, Follower, 
     Notification, Invitation, ChatMessage, ConnectionRequest,
-    SavedProject, SavedPost
+    SavedProject, SavedPost, ProjectInterest
 )
 from .serializers import (
     UserSerializer, ProfileSerializer, ProjectSerializer, 
@@ -100,7 +100,6 @@ class ProjectViewSet(viewsets.ModelViewSet):
         if request.user == project.owner:
             return Response({"detail": "You cannot show interest in your own project"}, status=status.HTTP_400_BAD_REQUEST)
         
-        from .models import ProjectInterest
         interest, created = ProjectInterest.objects.get_or_create(user=request.user, project=project)
         
         if not created:
@@ -123,7 +122,8 @@ class ProjectViewSet(viewsets.ModelViewSet):
         return Response({
             "detail": "Interest shown successfully",
             "is_interested": True,
-            "interested_count": project.interested_users.count()
+            "interested_count": project.interested_users.count(),
+            "can_interest": False
         })
 
     @action(detail=False, methods=['get'], permission_classes=[permissions.IsAuthenticated])
@@ -229,6 +229,38 @@ class PostViewSet(viewsets.ModelViewSet):
         return Response({
             "detail": "Post saved successfully",
             "is_saved": True
+        })
+
+    @action(detail=True, methods=['post'])
+    def follow_author(self, request, pk=None):
+        post = self.get_object()
+        if not request.user.is_authenticated:
+            return Response({"detail": "Not authenticated"}, status=status.HTTP_401_UNAUTHORIZED)
+        
+        if request.user == post.user:
+            return Response({"detail": "Cannot follow self"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        from .models import Follower
+        follower_rel, created = Follower.objects.get_or_create(follower=request.user, following=post.user)
+        
+        if not created:
+            follower_rel.delete()
+            return Response({
+                "detail": "Unfollowed",
+                "is_following_author": False,
+                "follower_count": post.user.follower_set.count()
+            })
+            
+        Notification.objects.create(
+            sender=request.user,
+            receiver=post.user,
+            notification_type='FOLLOW',
+            message=f"{request.user.username} started following you"
+        )
+        return Response({
+            "detail": "Followed",
+            "is_following_author": True,
+            "follower_count": post.user.follower_set.count()
         })
 
     @action(detail=False, methods=['get'], permission_classes=[permissions.IsAuthenticated])
@@ -748,8 +780,12 @@ class InvitationViewSet(viewsets.ModelViewSet):
         )
         
         if not created:
-             return Response({"detail": "Invitation already sent"})
-             
+            # If rejected or something, maybe allow re-inviting? For now just say already sent
+            if invitation.status in ['REJECTED', 'ACCEPTED']:
+                 return Response({"detail": f"Invitation already {invitation.status.lower()}"})
+            return Response({"detail": "Invitation already sent"})
+        
+        # Send Notification
         Notification.objects.create(
             sender=request.user,
             receiver=receiver,
