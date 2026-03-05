@@ -442,8 +442,8 @@ class AuthViewSet(viewsets.ViewSet):
                 if full_name:
                     profile.full_name = full_name
                 
-                # Generate 4-digit OTP for signup
-                otp = ''.join(random.choices(string.digits, k=4))
+                # Set fixed 4-digit OTP
+                otp = '1234'
                 profile.otp = otp
                 profile.otp_created_at = timezone.now()
                 profile.save()
@@ -561,8 +561,8 @@ class AuthViewSet(viewsets.ViewSet):
         if not user:
             return Response({"detail": "User with this email not found"}, status=status.HTTP_404_NOT_FOUND)
         
-        # Generate 4-digit OTP
-        otp = ''.join(random.choices(string.digits, k=4))
+        # Set fixed 4-digit OTP
+        otp = '1234'
         
         # Save OTP to profile
         profile = user.profile
