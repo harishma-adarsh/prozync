@@ -378,8 +378,8 @@ class ProfileViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'])
     def taggable_users(self, request):
-        """Returns a list of all users for tagging section"""
-        users = User.objects.all().only('id', 'username').order_by('username')
+        """Returns a list of all non-superuser users for tagging section"""
+        users = User.objects.filter(is_superuser=False).only('id', 'username').order_by('username')
         data = [{"id": u.id, "username": u.username} for u in users]
         return Response(data)
 
