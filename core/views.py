@@ -442,8 +442,8 @@ class AuthViewSet(viewsets.ViewSet):
                 if full_name:
                     profile.full_name = full_name
                 
-                # Generate 6-digit OTP for signup
-                otp = ''.join(random.choices(string.digits, k=6))
+                # Generate 4-digit OTP for signup
+                otp = ''.join(random.choices(string.digits, k=4))
                 profile.otp = otp
                 profile.otp_created_at = timezone.now()
                 profile.save()
@@ -561,8 +561,8 @@ class AuthViewSet(viewsets.ViewSet):
         if not user:
             return Response({"detail": "User with this email not found"}, status=status.HTTP_404_NOT_FOUND)
         
-        # Generate 6-digit OTP
-        otp = ''.join(random.choices(string.digits, k=6))
+        # Generate 4-digit OTP
+        otp = ''.join(random.choices(string.digits, k=4))
         
         # Save OTP to profile
         profile = user.profile
@@ -585,12 +585,13 @@ class AuthViewSet(viewsets.ViewSet):
     @extend_schema(request=ResetPasswordSerializer)
     @action(detail=False, methods=['post'])
     def reset_password(self, request):
-        email = request.data.get('email')
-        otp = request.data.get('otp')
-        new_password = request.data.get('new_password')
-        
-        if not email or not otp or not new_password:
-            return Response({"detail": "Missing fields"}, status=status.HTTP_400_BAD_REQUEST)
+        serializer = ResetPasswordSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            
+        email = serializer.validated_data.get('email')
+        otp = serializer.validated_data.get('otp')
+        new_password = serializer.validated_data.get('new_password')
             
         user = User.objects.filter(email=email).first()
         if not user:

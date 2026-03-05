@@ -2,7 +2,7 @@ from django.contrib import admin
 from .models import (
     Profile, Project, Post, Comment, Like, Collaboration, Follower, 
     Notification, Invitation, ChatMessage, ConnectionRequest,
-    SavedProject, SavedPost
+    SavedProject, SavedPost, ProjectInterest
 )
 
 admin.site.register(Profile)
@@ -18,3 +18,4 @@ admin.site.register(ChatMessage)
 admin.site.register(ConnectionRequest)
 admin.site.register(SavedProject)
 admin.site.register(SavedPost)
+admin.site.register(ProjectInterest)
