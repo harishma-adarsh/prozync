@@ -24,6 +24,7 @@ from .serializers import (
     SavedProjectSerializer, SavedPostSerializer
 )
 
+
 class ProjectViewSet(viewsets.ModelViewSet):
     serializer_class = ProjectSerializer
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
