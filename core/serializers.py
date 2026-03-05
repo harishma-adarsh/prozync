@@ -118,9 +118,11 @@ class ProjectSerializer(serializers.ModelSerializer):
     owner_name = serializers.CharField(source='owner.username', read_only=True)
     collaborator_count = serializers.SerializerMethodField()
     is_saved = serializers.SerializerMethodField()
+    is_interested = serializers.SerializerMethodField()
+    interested_count = serializers.SerializerMethodField()
     class Meta:
         model = Project
-        fields = ['id', 'owner', 'owner_name', 'project_name', 'slug', 'description', 'technology', 'project_zip', 'cover_image', 'is_private', 'is_pinned', 'collaborator_count', 'collaborators', 'is_saved', 'created_at']
+        fields = ['id', 'owner', 'owner_name', 'project_name', 'slug', 'description', 'technology', 'project_zip', 'cover_image', 'is_private', 'is_pinned', 'collaborator_count', 'collaborators', 'is_saved', 'is_interested', 'interested_count', 'created_at']
         read_only_fields = ['owner', 'slug']
 
     def to_representation(self, instance):
@@ -149,6 +151,18 @@ class ProjectSerializer(serializers.ModelSerializer):
         if not request or not request.user.is_authenticated:
             return False
         return SavedProject.objects.filter(user=request.user, project=obj).exists()
+    
+    @extend_schema_field(serializers.BooleanField())
+    def get_is_interested(self, obj) -> bool:
+        request = self.context.get('request')
+        if not request or not request.user.is_authenticated:
+            return False
+        from .models import ProjectInterest
+        return ProjectInterest.objects.filter(user=request.user, project=obj).exists()
+
+    @extend_schema_field(serializers.IntegerField())
+    def get_interested_count(self, obj) -> int:
+        return obj.interested_users.count()
 
     @extend_schema_field(serializers.IntegerField())
     def get_collaborator_count(self, obj) -> int:

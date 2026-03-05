@@ -81,9 +81,50 @@ class ProjectViewSet(viewsets.ModelViewSet):
         saved, created = SavedProject.objects.get_or_create(user=request.user, project=project)
         if not created:
             saved.delete()
-            return Response({"detail": "Project removed from saved"})
+            return Response({
+                "detail": "Project removed from saved",
+                "is_saved": False
+            })
         
-        return Response({"detail": "Project saved successfully"})
+        return Response({
+            "detail": "Project saved successfully",
+            "is_saved": True
+        })
+
+    @action(detail=True, methods=['post'])
+    def interested(self, request, pk=None):
+        project = self.get_object()
+        if not request.user.is_authenticated:
+            return Response({"detail": "Not authenticated"}, status=status.HTTP_401_UNAUTHORIZED)
+        
+        if request.user == project.owner:
+            return Response({"detail": "You cannot show interest in your own project"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        from .models import ProjectInterest
+        interest, created = ProjectInterest.objects.get_or_create(user=request.user, project=project)
+        
+        if not created:
+            interest.delete()
+            return Response({
+                "detail": "Interest removed",
+                "is_interested": False,
+                "interested_count": project.interested_users.count()
+            })
+        
+        # Notify owner with hardcoded message
+        Notification.objects.create(
+            sender=request.user,
+            receiver=project.owner,
+            project=project,
+            notification_type='INTERESTED',
+            message=f"{request.user.username} is interested in your project: {project.project_name}"
+        )
+        
+        return Response({
+            "detail": "Interest shown successfully",
+            "is_interested": True,
+            "interested_count": project.interested_users.count()
+        })
 
     @action(detail=False, methods=['get'], permission_classes=[permissions.IsAuthenticated])
     def my_saved(self, request):
@@ -150,7 +191,11 @@ class PostViewSet(viewsets.ModelViewSet):
         like, created = Like.objects.get_or_create(post=post, user=request.user)
         if not created:
             like.delete()
-            return Response({"detail": "Unliked"})
+            return Response({
+                "detail": "Unliked",
+                "is_liked": False,
+                "like_count": post.likes.count()
+            })
         
         # Notify
         if post.user != request.user:
@@ -161,7 +206,11 @@ class PostViewSet(viewsets.ModelViewSet):
                 notification_type='LIKE',
                 message=f"{request.user.username} liked your post"
             )
-        return Response({"detail": "Liked"})
+        return Response({
+            "detail": "Liked",
+            "is_liked": True,
+            "like_count": post.likes.count()
+        })
 
     @action(detail=True, methods=['post'])
     def save_post(self, request, pk=None):
@@ -172,9 +221,15 @@ class PostViewSet(viewsets.ModelViewSet):
         saved, created = SavedPost.objects.get_or_create(user=request.user, post=post)
         if not created:
             saved.delete()
-            return Response({"detail": "Post removed from saved"})
+            return Response({
+                "detail": "Post removed from saved",
+                "is_saved": False
+            })
         
-        return Response({"detail": "Post saved successfully"})
+        return Response({
+            "detail": "Post saved successfully",
+            "is_saved": True
+        })
 
     @action(detail=False, methods=['get'], permission_classes=[permissions.IsAuthenticated])
     def my_saved(self, request):
@@ -267,7 +322,11 @@ class ProfileViewSet(viewsets.ModelViewSet):
         follower_rel, created = Follower.objects.get_or_create(follower=request.user, following=profile.user)
         if not created:
             follower_rel.delete()
-            return Response({"detail": "Unfollowed"})
+            return Response({
+                "detail": "Unfollowed",
+                "is_following": False,
+                "follower_count": profile.user.follower_set.count()
+            })
             
         Notification.objects.create(
             sender=request.user,
@@ -275,7 +334,11 @@ class ProfileViewSet(viewsets.ModelViewSet):
             notification_type='FOLLOW',
             message=f"{request.user.username} started following you"
         )
-        return Response({"detail": "Followed"})
+        return Response({
+            "detail": "Followed",
+            "is_following": True,
+            "follower_count": profile.user.follower_set.count()
+        })
 
     @action(detail=True, methods=['post'])
     def connect(self, request, pk=None):

@@ -83,6 +83,7 @@ class Notification(models.Model):
         ('TAG', 'User Tag'),
         ('ACCEPT_COLLAB', 'Collaboration Accepted'),
         ('ACCEPT_CONNECTION', 'Connection Accepted'),
+        ('INTERESTED', 'Project Interest'),
     ]
     sender = models.ForeignKey(User, on_delete=models.CASCADE, related_name='sent_notifications')
     receiver = models.ForeignKey(User, on_delete=models.CASCADE, related_name='received_notifications')
@@ -147,3 +148,14 @@ class SavedPost(models.Model):
 
     def __str__(self):
         return f"{self.user.username} saved post {self.post.id}"
+
+class ProjectInterest(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='interested_projects')
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='interested_users')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('user', 'project')
+
+    def __str__(self):
+        return f"{self.user.username} is interested in {self.project.project_name}"
