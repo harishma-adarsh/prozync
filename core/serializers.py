@@ -61,6 +61,8 @@ class ProfileSerializer(serializers.ModelSerializer):
     repo_count = serializers.SerializerMethodField()
     connection_status = serializers.SerializerMethodField()
     recent_projects = serializers.SerializerMethodField()
+    is_following = serializers.SerializerMethodField()
+    can_follow = serializers.SerializerMethodField()
     
     class Meta:
         model = Profile

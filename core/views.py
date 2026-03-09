@@ -320,6 +320,7 @@ class PostViewSet(viewsets.ModelViewSet):
 class ProfileViewSet(viewsets.ModelViewSet):
     queryset = Profile.objects.all()
     serializer_class = ProfileSerializer
+    http_method_names = ['get', 'patch', 'put', 'head', 'options']
     filter_backends = [filters.SearchFilter]
     search_fields = ['full_name', 'user__username', 'profession']
 
@@ -675,6 +676,7 @@ class ChatMessageViewSet(viewsets.ModelViewSet):
     queryset = ChatMessage.objects.all()
     permission_classes = [permissions.IsAuthenticated]
     serializer_class = ChatMessageSerializer
+    http_method_names = ['get', 'post', 'head', 'options']
 
     def perform_create(self, serializer):
         receiver_id = self.request.data.get('receiver')
@@ -718,6 +720,7 @@ class InvitationViewSet(viewsets.ModelViewSet):
     queryset = Invitation.objects.all()
     permission_classes = [permissions.IsAuthenticated]
     serializer_class = InvitationSerializer
+    http_method_names = ['get', 'post', 'head', 'options']
 
     def get_queryset(self):
         return Invitation.objects.filter(receiver=self.request.user)
@@ -802,6 +805,7 @@ class ConnectionRequestViewSet(viewsets.ModelViewSet):
     queryset = ConnectionRequest.objects.all()
     permission_classes = [permissions.IsAuthenticated]
     serializer_class = ConnectionRequestSerializer
+    http_method_names = ['get', 'post', 'head', 'options']
 
     def get_queryset(self):
         return ConnectionRequest.objects.filter(receiver=self.request.user, status='PENDING')
