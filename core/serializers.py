@@ -234,8 +234,13 @@ class ProjectSerializer(serializers.ModelSerializer):
 
     @extend_schema_field(serializers.ListField(child=serializers.DictField()))
     def get_owner_recent_projects(self, obj):
+        if self.context.get('is_recent_project_query'):
+            return []
+        
         projects = Project.objects.filter(owner=obj.owner).order_by('-created_at')[:5]
-        return ProjectSerializer(projects, many=True, context=self.context).data
+        context = self.context.copy()
+        context['is_recent_project_query'] = True
+        return ProjectSerializer(projects, many=True, context=context).data
     
     @extend_schema_field(serializers.BooleanField())
     def get_can_interest(self, obj) -> bool:
@@ -265,6 +270,7 @@ class PostSerializer(serializers.ModelSerializer):
     class Meta:
         model = Post
         fields = ['id', 'user', 'username', 'author_profile_pic', 'project', 'image', 'content', 'tagged_users', 'tagged_users_details', 'mentioned_user_ids', 'is_following_author', 'can_follow_author', 'like_count', 'comment_count', 'is_liked', 'is_saved', 'created_at']
+        read_only_fields = ['user']
 
     def to_representation(self, instance):
         representation = super().to_representation(instance)
